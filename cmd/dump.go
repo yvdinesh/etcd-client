@@ -16,6 +16,7 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"path/filepath"
 )
 
 var (
@@ -26,15 +27,23 @@ var (
 	pathToDump string
 )
 
+func mustMakeAbs(path string) string {
+	ret, err := filepath.Abs(path)
+	if err != nil {
+		panic(err)
+	}
+	return ret
+}
+
 var dumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Dumps the keyspace with key as path and value as contents of the file",
 	Run: func(cmd *cobra.Command, args []string) {
 		clientV3 := NewEtcdV3Client(ClientConfig{
-			CertPath:  certPath,
-			KeyPath:   keyPath,
+			CertPath:  mustMakeAbs(certPath),
+			KeyPath:   mustMakeAbs(keyPath),
 			EndPoints: endpoints,
-			CAPath:    caPath,
+			CAPath:    mustMakeAbs(caPath),
 		})
 		err := clientV3.Dump(pathToDump)
 		if err != nil {
