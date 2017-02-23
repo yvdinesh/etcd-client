@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/palantir/go-palantir/tlsutils"
 	"github.com/palantir/stacktrace"
@@ -43,10 +44,11 @@ func NewEtcdV3Client(config ClientConfig) EtcdClient {
 }
 
 func (c *EtcdV3Client) Dump(pathToDump string) error {
-	resp, err := c.client.Get(context.Background(), "/")
+	resp, err := c.client.Get(context.Background(), "/", clientv3.WithPrefix())
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
+	fmt.Printf("number of keys to dump:%v\n", len(resp.Kvs))
 	for _, kv := range resp.Kvs {
 		err = WriteFile(filepath.Join(pathToDump, filepath.FromSlash(string(kv.Key))), kv.Value)
 		if err != nil {
