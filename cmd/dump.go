@@ -1,17 +1,3 @@
-// Copyright © 2017 NAME HERE <EMAIL ADDRESS>
-//
-// Licensed under the Apache License, Version 2.0 (the "License");
-// you may not use this file except in compliance with the License.
-// You may obtain a copy of the License at
-//
-//     http://www.apache.org/licenses/LICENSE-2.0
-//
-// Unless required by applicable law or agreed to in writing, software
-// distributed under the License is distributed on an "AS IS" BASIS,
-// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-// See the License for the specific language governing permissions and
-// limitations under the License.
-
 package cmd
 
 import (
@@ -25,6 +11,7 @@ var (
 	caPath     string
 	endpoints  []string
 	pathToDump string
+	enableV3   bool
 )
 
 func mustMakeAbs(path string) string {
@@ -39,13 +26,19 @@ var dumpCmd = &cobra.Command{
 	Use:   "dump",
 	Short: "Dumps the keyspace with key as path and value as contents of the file",
 	Run: func(cmd *cobra.Command, args []string) {
-		clientV3 := NewEtcdV3Client(ClientConfig{
+		var client EtcdClient
+		config := ClientConfig{
 			CertPath:  mustMakeAbs(certPath),
 			KeyPath:   mustMakeAbs(keyPath),
 			EndPoints: endpoints,
 			CAPath:    mustMakeAbs(caPath),
-		})
-		err := clientV3.Dump(pathToDump)
+		}
+		if enableV3 {
+			client = NewEtcdV3Client(config)
+		} else {
+			client = NewEtcdv2Client(config)
+		}
+		err := client.Dump(pathToDump)
 		if err != nil {
 			panic(err)
 		}
@@ -55,6 +48,7 @@ var dumpCmd = &cobra.Command{
 func init() {
 	RootCmd.AddCommand(dumpCmd)
 	dumpCmd.Flags().StringVar(&certPath, "cert-path", "", "Path to the etcd certificate")
+	dumpCmd.Flags().BoolVar(&enableV3, "enable-v3", false, "Enable v3 client")
 	dumpCmd.Flags().StringVar(&keyPath, "key-path", "", "Path to the etcd key")
 	dumpCmd.Flags().StringVar(&caPath, "ca-path", "", "Path to the etcd ca")
 	dumpCmd.Flags().StringArrayVar(&endpoints, "endpoints", []string{""}, "Endpoints on which etcd is listening")

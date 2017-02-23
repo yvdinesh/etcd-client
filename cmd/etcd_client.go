@@ -5,10 +5,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	clientv2 "github.com/coreos/etcd/client"
 	"github.com/coreos/etcd/clientv3"
 	"github.com/palantir/go-palantir/tlsutils"
 	"github.com/palantir/stacktrace"
 	"io/ioutil"
+	"net"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -25,6 +28,41 @@ type EtcdClient interface {
 
 type EtcdV3Client struct {
 	client *clientv3.Client
+}
+
+type EtcdV2Client struct {
+	client clientv2.KeysAPI
+}
+
+func NewEtcdv2Client(config ClientConfig) EtcdClient {
+	tlsConfig, err := tlsutils.LoadTLSConfig(config.CertPath, config.KeyPath, []string{config.CAPath}, nil)
+	if err != nil {
+		panic(err)
+	}
+	client, err := clientv2.New(clientv2.Config{
+		Endpoints: config.EndPoints,
+		Transport: &http.Transport{
+			Dial: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+			}).Dial,
+			TLSHandshakeTimeout: 10 * time.Second,
+			TLSClientConfig:     tlsConfig,
+			MaxIdleConnsPerHost: 64,
+		},
+	})
+	if err != nil {
+		panic(err)
+	}
+	return &EtcdV2Client{client: clientv2.NewKeysAPI(client)}
+}
+
+func (c *EtcdV2Client) Dump(pathToDump string) error {
+	resp, err := c.client.Get(context.Background(), "/", &clientv2.GetOptions{Recursive: true})
+	if err != nil {
+		stacktrace.Propagate(err, "")
+	}
+	return dump(resp.Node, pathToDump)
 }
 
 func NewEtcdV3Client(config ClientConfig) EtcdClient {
@@ -50,7 +88,7 @@ func (c *EtcdV3Client) Dump(pathToDump string) error {
 	}
 	fmt.Printf("number of keys to dump:%v\n", len(resp.Kvs))
 	for _, kv := range resp.Kvs {
-		err = WriteFile(filepath.Join(pathToDump, filepath.FromSlash(string(kv.Key))), kv.Value)
+		err = writeFile(filepath.Join(pathToDump, filepath.FromSlash(string(kv.Key))), kv.Value)
 		if err != nil {
 			return stacktrace.Propagate(err, "")
 		}
@@ -58,7 +96,25 @@ func (c *EtcdV3Client) Dump(pathToDump string) error {
 	return nil
 }
 
-func WriteFile(path string, b []byte) error {
+func dump(node *clientv2.Node, pathToDump string) error {
+	// Reached the end of the tree
+	if node == nil {
+		return nil
+	}
+
+	// Reached a file
+	if !node.Dir {
+		return writeFile(filepath.Join(pathToDump, filepath.FromSlash(node.Key)), []byte(node.Value))
+	}
+
+	for _, child := range node.Nodes {
+		if err := dump(child, pathToDump); err != nil {
+			return stacktrace.Propagate(err, "Failed to dump %q", child.Key)
+		}
+	}
+	return nil
+}
+func writeFile(path string, b []byte) error {
 	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return stacktrace.Propagate(err, "")
 	}
