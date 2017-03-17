@@ -23,7 +23,8 @@ type ClientConfig struct {
 }
 
 type EtcdClient interface {
-	Dump(pathToDump string) error
+	Dump(root, pathToDump string) error
+	Get(key string) (string, error)
 }
 
 type EtcdV3Client struct {
@@ -57,12 +58,23 @@ func NewEtcdv2Client(config ClientConfig) EtcdClient {
 	return &EtcdV2Client{client: clientv2.NewKeysAPI(client)}
 }
 
-func (c *EtcdV2Client) Dump(pathToDump string) error {
-	resp, err := c.client.Get(context.Background(), "/", &clientv2.GetOptions{Recursive: true})
+func (c *EtcdV2Client) Dump(root, pathToDump string) error {
+	resp, err := c.client.Get(context.Background(), root, &clientv2.GetOptions{Recursive: true})
 	if err != nil {
-		stacktrace.Propagate(err, "")
+		return stacktrace.Propagate(err, "")
+	}
+	if resp == nil {
+		return stacktrace.Propagate(err, "empty response from etcd")
 	}
 	return dump(resp.Node, pathToDump)
+}
+
+func (c *EtcdV2Client) Get(key string) (string, error) {
+	resp, err := c.client.Get(context.Background(), key, nil)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "")
+	}
+	return resp.Node.Value, nil
 }
 
 func NewEtcdV3Client(config ClientConfig) EtcdClient {
@@ -81,8 +93,8 @@ func NewEtcdV3Client(config ClientConfig) EtcdClient {
 	return &EtcdV3Client{client: client}
 }
 
-func (c *EtcdV3Client) Dump(pathToDump string) error {
-	resp, err := c.client.Get(context.Background(), "/", clientv3.WithPrefix())
+func (c *EtcdV3Client) Dump(root, pathToDump string) error {
+	resp, err := c.client.Get(context.Background(), root, clientv3.WithPrefix())
 	if err != nil {
 		return stacktrace.Propagate(err, "")
 	}
@@ -94,6 +106,17 @@ func (c *EtcdV3Client) Dump(pathToDump string) error {
 		}
 	}
 	return nil
+}
+
+func (c *EtcdV3Client) Get(key string) (string, error) {
+	resp, err := c.client.Get(context.Background(), key, nil)
+	if err != nil {
+		return "", stacktrace.Propagate(err, "")
+	}
+	if len(resp.Kvs) == 0 {
+		return "", stacktrace.NewError("No key found")
+	}
+	return string(resp.Kvs[0].Value), nil
 }
 
 func dump(node *clientv2.Node, pathToDump string) error {
