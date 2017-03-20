@@ -65,7 +65,6 @@ var getOverloadCmd = &cobra.Command{
 			CAPath:    mustMakeAbs(caPath),
 		}
 		var wg sync.WaitGroup
-		wg.Add(numGets)
 		if refreshInterval == 0 {
 			refreshInterval = numGets
 		}
@@ -75,6 +74,7 @@ var getOverloadCmd = &cobra.Command{
 			} else {
 				client = NewEtcdv2Client(config)
 			}
+			wg.Add(refreshInterval)
 			for i := 0; i < refreshInterval; i++ {
 				go func() {
 					defer wg.Done()
