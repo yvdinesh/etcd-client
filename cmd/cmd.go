@@ -2,20 +2,24 @@ package cmd
 
 import (
 	"github.com/spf13/cobra"
+	"math/rand"
 	"path/filepath"
 	"sync"
+	"time"
 )
 
 var (
-	certPath   string
-	keyPath    string
-	caPath     string
-	endpoints  []string
-	pathToDump string
-	enableV3   bool
-	root       string
-	numGets    int
-	etcdKey    string
+	certPath        string
+	keyPath         string
+	caPath          string
+	endpoints       []string
+	pathToDump      string
+	enableV3        bool
+	root            string
+	numGets         int
+	etcdKey         string
+	refreshInterval int
+	maxWait         int
 )
 
 func mustMakeAbs(path string) string {
@@ -67,16 +71,27 @@ var getOverloadCmd = &cobra.Command{
 		}
 		var wg sync.WaitGroup
 		wg.Add(numGets)
-		for i := 0; i < numGets; i++ {
-			go func() {
-				defer wg.Done()
-				_, err := client.Get(etcdKey)
-				if err != nil {
-					panic(err)
-				}
-			}()
+		if refreshInterval == 0 {
+			refreshInterval = numGets
 		}
-		wg.Wait()
+		for g := 0; g < numGets; {
+			for i := 0; i < refreshInterval; i++ {
+				go func() {
+					defer wg.Done()
+					time.Sleep(time.Duration(rand.Intn(maxWait)+1) * time.Second)
+					_, err := client.Get(etcdKey)
+					if err != nil {
+						panic(err)
+					}
+				}()
+			}
+			wg.Wait()
+			err := client.Close()
+			if err != nil {
+				panic(err)
+			}
+			g += refreshInterval
+		}
 	},
 }
 
@@ -98,4 +113,6 @@ func init() {
 	getOverloadCmd.Flags().StringArrayVar(&endpoints, "endpoints", []string{""}, "Endpoints on which etcd is listening")
 	getOverloadCmd.Flags().IntVar(&numGets, "numgets", 1, "Number of gets")
 	getOverloadCmd.Flags().StringVar(&etcdKey, "etcd-key", "", "Key in etcd to get")
+	getOverloadCmd.Flags().IntVar(&refreshInterval, "refresh-interval", 0, "Number of gets after which client will be refreshed")
+	getOverloadCmd.Flags().IntVar(&maxWait, "max-wait", 10, "Upper bound on seconds to wait before calling the next get.")
 }

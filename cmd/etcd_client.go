@@ -25,6 +25,7 @@ type ClientConfig struct {
 type EtcdClient interface {
 	Dump(root, pathToDump string) error
 	Get(key string) (string, error)
+	Close() error
 }
 
 type EtcdV3Client struct {
@@ -67,6 +68,9 @@ func (c *EtcdV2Client) Dump(root, pathToDump string) error {
 		return stacktrace.Propagate(err, "empty response from etcd")
 	}
 	return dump(resp.Node, pathToDump)
+}
+func (c *EtcdV2Client) Close() error {
+	return nil
 }
 
 func (c *EtcdV2Client) Get(key string) (string, error) {
@@ -117,6 +121,10 @@ func (c *EtcdV3Client) Get(key string) (string, error) {
 		return "", stacktrace.NewError("No key found")
 	}
 	return string(resp.Kvs[0].Value), nil
+}
+
+func (c *EtcdV3Client) Close() error {
+	return c.client.Close()
 }
 
 func dump(node *clientv2.Node, pathToDump string) error {
