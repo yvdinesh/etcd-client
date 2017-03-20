@@ -1,6 +1,6 @@
 package main
 
-import "github.com/dyeduguru/etcd-client/cmd"
+import "github.com/yvdinesh/etcd-client/cmd"
 
 func main() {
 	cmd.Execute()

@@ -113,7 +113,7 @@ func (c *EtcdV3Client) Dump(root, pathToDump string) error {
 }
 
 func (c *EtcdV3Client) Get(key string) (string, error) {
-	resp, err := c.client.Get(context.Background(), key, nil)
+	resp, err := c.client.Get(context.Background(), key)
 	if err != nil {
 		return "", stacktrace.Propagate(err, "")
 	}

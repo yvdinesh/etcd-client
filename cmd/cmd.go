@@ -64,17 +64,17 @@ var getOverloadCmd = &cobra.Command{
 			EndPoints: endpoints,
 			CAPath:    mustMakeAbs(caPath),
 		}
-		if enableV3 {
-			client = NewEtcdV3Client(config)
-		} else {
-			client = NewEtcdv2Client(config)
-		}
 		var wg sync.WaitGroup
 		wg.Add(numGets)
 		if refreshInterval == 0 {
 			refreshInterval = numGets
 		}
 		for g := 0; g < numGets; {
+			if enableV3 {
+				client = NewEtcdV3Client(config)
+			} else {
+				client = NewEtcdv2Client(config)
+			}
 			for i := 0; i < refreshInterval; i++ {
 				go func() {
 					defer wg.Done()
